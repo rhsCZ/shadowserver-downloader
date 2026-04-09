@@ -1,0 +1,6 @@
+api-key=YOUR_API_KEY
+secret=YOUR_API_SECRET
+# optional
+# logfile=/var/log/shadowserver-reports.log
+# download_path=/var/shadowserver/reports
+# database_path=/var/shadowserver-reports.db
