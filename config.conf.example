@@ -4,3 +4,4 @@ secret=YOUR_API_SECRET
 # logfile=/var/log/shadowserver-reports.log
 # download_path=/var/shadowserver/reports
 # database_path=/var/shadowserver-reports.db
+# delay=0.5s

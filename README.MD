@@ -30,12 +30,14 @@ It uses:
 - supports `--from-to-date`
 - supports `--clean-db`
 - supports `--remove-id-date`
+- configuration values can be overridden with CLI arguments
 - accepts both `YYYY-MM-DD` and `DD-MM-YYYY`
 - skips already downloaded reports using SQLite
 - stores `reported_at` from the API `timestamp` field
 - optional `logfile`
 - optional `download_path`
 - optional `database_path`
+- optional `delay` between report downloads
 
 ## Default paths
 
@@ -46,6 +48,7 @@ If not configured:
 - `download_path` defaults to the directory containing the binary
 - `logfile` is disabled
 - `database_path` defaults to `/var/shadowserver-reports.db`
+- `delay` defaults to no delay
 
 ## Example configuration
 

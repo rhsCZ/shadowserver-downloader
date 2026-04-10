@@ -3,7 +3,7 @@
 ## Run
 
 ```bash
-shadowserver-downloader [--date DATE] [--from-date DATE] [--from-to-date DATE:DATE] [--clean-db] [--remove-id-date VALUE] [--help|-h]
+shadowserver-downloader [--date DATE] [--from-date DATE] [--from-to-date DATE:DATE] [--clean-db] [--remove-id-date VALUE] [options] [--help|-h]
 ```
 
 ## Arguments
@@ -18,6 +18,18 @@ shadowserver-downloader [--date DATE] [--from-date DATE] [--from-to-date DATE:DA
   removes all database records and exits
 - `--remove-id-date VALUE`
   removes database records by report ID, single date, or date range and exits
+- `--api-key VALUE`
+  overrides `api-key` from configuration
+- `--secret VALUE`
+  overrides `secret` from configuration
+- `--logfile VALUE`
+  overrides `logfile` from configuration
+- `--download-path VALUE`
+  overrides `download_path` from configuration
+- `--database-path VALUE`
+  overrides `database_path` from configuration
+- `--delay VALUE`
+  overrides `delay` from configuration
 - `--help`, `-h`
   shows help
 
@@ -93,6 +105,33 @@ secret=YOUR_API_SECRET
 # logfile=/var/log/shadowserver-reports.log
 # download_path=/var/shadowserver/reports
 # database_path=/var/shadowserver-reports.db
+# delay=0.5s
+```
+
+`delay` controls how long the program waits between downloading individual reports.
+Supported units are:
+
+- `h` for hours
+- `m` for minutes
+- `s` for seconds
+- `ms` for milliseconds
+
+Examples:
+
+```ini
+delay=2s
+delay=500ms
+delay=0.5s
+delay=1m
+```
+
+Configuration values can also be specified as command-line arguments.
+Command-line arguments take precedence over values from `/etc/shadowserver/config.conf`.
+
+Example:
+
+```bash
+shadowserver-downloader --date 2026-04-08 --download-path /tmp/reports --delay 500ms
 ```
 
 ## Program behavior

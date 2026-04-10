@@ -35,6 +35,7 @@ Optional:
 logfile=/var/log/shadowserver-reports.log
 download_path=/var/shadowserver/reports
 database_path=/var/shadowserver-reports.db
+delay=0.5s
 ```
 
 ## 4. Permissions and directories
@@ -50,6 +51,12 @@ The process must have write access to:
 - the target report directory
 - the log directory, if logging is enabled
 - the database directory
+
+Configuration values can be overridden at runtime with CLI arguments, for example:
+
+```bash
+shadowserver-downloader --database-path /tmp/shadowserver.db --download-path /tmp/reports --delay 500ms
+```
 
 ## 5. Test run
 

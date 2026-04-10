@@ -23,6 +23,7 @@
 #include <string>
 #include <string_view>
 #include <sys/stat.h>
+#include <thread>
 #include <unordered_set>
 #include <unistd.h>
 #include <utility>
@@ -44,6 +45,7 @@ struct Config {
     std::string log_path;
     std::string download_path;
     std::string database_path = kDatabasePath;
+    std::chrono::milliseconds delay{0};
 };
 
 struct Options {
@@ -51,6 +53,12 @@ struct Options {
     bool show_help = false;
     bool clean_db = false;
     std::optional<std::string> remove_id_date;
+    std::optional<std::string> api_key;
+    std::optional<std::string> secret;
+    std::optional<std::string> log_path;
+    std::optional<std::string> download_path;
+    std::optional<std::string> database_path;
+    std::optional<std::chrono::milliseconds> delay;
 };
 
 struct HttpResponse {
@@ -330,6 +338,31 @@ std::string Trim(std::string value) {
     return value;
 }
 
+std::chrono::milliseconds ParseDelay(const std::string& value) {
+    static const std::regex pattern(R"(^([0-9]+(?:\.[0-9]+)?)(ms|s|m|h)$)");
+    std::smatch match;
+    const std::string trimmed = Trim(value);
+    if (!std::regex_match(trimmed, match, pattern)) {
+        throw std::runtime_error("Invalid delay value: " + value + ". Use a number followed by h, m, s, or ms.");
+    }
+
+    const double amount = std::stod(match[1].str());
+    const std::string unit = match[2].str();
+    double milliseconds = amount;
+    if (unit == "h") {
+        milliseconds *= 60.0 * 60.0 * 1000.0;
+    } else if (unit == "m") {
+        milliseconds *= 60.0 * 1000.0;
+    } else if (unit == "s") {
+        milliseconds *= 1000.0;
+    }
+
+    if (milliseconds < 0.0) {
+        throw std::runtime_error("Invalid delay value: " + value);
+    }
+    return std::chrono::milliseconds(static_cast<long long>(milliseconds));
+}
+
 Config LoadConfig(const std::string& path) {
     std::ifstream file(path);
     if (!file) {
@@ -362,6 +395,8 @@ Config LoadConfig(const std::string& path) {
             config.download_path = value;
         } else if (key == "database_path" || key == "database-path") {
             config.database_path = value;
+        } else if (key == "delay") {
+            config.delay = ParseDelay(value);
         }
     }
     return config;
@@ -473,6 +508,12 @@ void PrintHelp(std::ostream& os, std::string_view program_name) {
        << "  --from-to-date VALUE  Range in DATE:DATE format, where DATE is YYYY-MM-DD or DD-MM-YYYY.\n"
        << "  --clean-db            Deletes all records from the database and exits.\n"
        << "  --remove-id-date VAL  Deletes records by ID, date, or date range and exits.\n"
+       << "  --api-key VALUE       Overrides api-key from configuration.\n"
+       << "  --secret VALUE        Overrides secret from configuration.\n"
+       << "  --logfile VALUE       Overrides logfile from configuration.\n"
+       << "  --download-path VALUE Overrides download_path from configuration.\n"
+       << "  --database-path VALUE Overrides database_path from configuration.\n"
+       << "  --delay VALUE         Overrides delay from configuration.\n"
        << "  --help, -h            Shows this help message.\n"
        << '\n'
        << "Fixed paths:\n"
@@ -485,10 +526,12 @@ void PrintHelp(std::ostream& os, std::string_view program_name) {
        << "  logfile=/path/to/logfile.log\n"
        << "  download_path=/path/to/directory\n"
        << "  database_path=/path/to/database.db\n"
+       << "  delay=0.5s\n"
        << '\n'
        << "If download_path is not set, reports are stored in the directory containing the program binary.\n"
        << "If logfile is not set, the program does not log anything.\n"
-       << "If database_path is not set, " << kDatabasePath << " is used.\n";
+       << "If database_path is not set, " << kDatabasePath << " is used.\n"
+       << "Delay units: h, m, s, ms.\n";
 }
 
 Options ParseArgs(int argc, char** argv) {
@@ -516,6 +559,29 @@ Options ParseArgs(int argc, char** argv) {
             }
             options.remove_id_date = argv[++i];
             ++maintenance_mode_count;
+            continue;
+        }
+
+        if (arg == "--api-key" || arg == "--secret" || arg == "--logfile" ||
+            arg == "--download-path" || arg == "--database-path" || arg == "--delay") {
+            if (i + 1 >= argc) {
+                throw std::runtime_error("Missing value after argument " + arg);
+            }
+
+            const std::string value = argv[++i];
+            if (arg == "--api-key") {
+                options.api_key = value;
+            } else if (arg == "--secret") {
+                options.secret = value;
+            } else if (arg == "--logfile") {
+                options.log_path = value;
+            } else if (arg == "--download-path") {
+                options.download_path = value;
+            } else if (arg == "--database-path") {
+                options.database_path = value;
+            } else {
+                options.delay = ParseDelay(value);
+            }
             continue;
         }
 
@@ -864,6 +930,27 @@ void EnsureDatabasePathReady(const fs::path& db_path) {
     EnsureParentDirectoryExists(db_path);
 }
 
+void ApplyOptionOverrides(const Options& options, Config& config) {
+    if (options.api_key.has_value()) {
+        config.api_key = *options.api_key;
+    }
+    if (options.secret.has_value()) {
+        config.secret = *options.secret;
+    }
+    if (options.log_path.has_value()) {
+        config.log_path = *options.log_path;
+    }
+    if (options.download_path.has_value()) {
+        config.download_path = *options.download_path;
+    }
+    if (options.database_path.has_value()) {
+        config.database_path = *options.database_path;
+    }
+    if (options.delay.has_value()) {
+        config.delay = *options.delay;
+    }
+}
+
 class CurlRuntime {
   public:
     CurlRuntime() {
@@ -887,6 +974,7 @@ int main(int argc, char** argv) {
         }
 
         Config config = LoadConfig(kConfigPath);
+        ApplyOptionOverrides(options, config);
         if (config.download_path.empty()) {
             config.download_path = ResolveExecutableDir(argc > 0 ? argv[0] : nullptr).string();
         }
@@ -925,6 +1013,7 @@ int main(int argc, char** argv) {
         EnsureDirectoryExists(download_dir);
         logger.Info("Program start, date filter: " + options.date_filter);
         logger.Info("Target directory for reports: " + config.download_path);
+        logger.Info("Delay between report downloads: " + std::to_string(config.delay.count()) + " ms");
 
         const std::vector<ReportEntry> reports = FetchReports(config, options.date_filter);
 
@@ -936,7 +1025,8 @@ int main(int argc, char** argv) {
         int downloaded_count = 0;
         int skipped_count = 0;
 
-        for (const ReportEntry& report : reports) {
+        for (std::size_t i = 0; i < reports.size(); ++i) {
+            const ReportEntry& report = reports[i];
             if (db.ContainsId(report.id)) {
                 ++skipped_count;
                 logger.Info("Report " + report.id + " is already in the database, skipping.");
@@ -947,6 +1037,9 @@ int main(int argc, char** argv) {
                 DownloadReport(report, download_dir, logger);
                 db.InsertReport(report.id, report.reported_at.empty() ? options.date_filter : report.reported_at);
                 ++downloaded_count;
+                if (config.delay.count() > 0 && i + 1 < reports.size()) {
+                    std::this_thread::sleep_for(config.delay);
+                }
             } catch (const std::exception& ex) {
                 logger.Error(ex.what());
             }
